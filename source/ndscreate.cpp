@@ -689,15 +689,16 @@ void Create()
 		fputc(0, fNDS);
 	}
 
-	// DSi sections
-	bool has_dsi9 = false, has_dsi7 = false;
+	// DSi sections. A missing one gets ROM offset 0 and size 0 (TWL_FIRM skips a section with offset 0
+	// but rejects one with size 0), and a valid default RAM address (which is still range-checked).
 	if (header.rom_header_size > 0x200 && is_both_elf)
 	{
 		int sections = 2;
 
 		// DSi ARM9 binary
 		{
-			header.dsi9_rom_offset = (ftell(fNDS) + sector_align) &~ sector_align;
+			long pos = ftell(fNDS);
+			header.dsi9_rom_offset = (pos + sector_align) &~ sector_align;
 			fseek(fNDS, header.dsi9_rom_offset, SEEK_SET);
 
 			unsigned int ram_address = 0;
@@ -709,19 +710,17 @@ void Create()
 				ram_address = (header.arm9_ram_address + header.arm9_size + 3) &~ 3;
 				if (0x2400000 > ram_address)
 					ram_address = 0x2400000;
-				size = 0x200;
-				fwrite("----DSi9----", 1, 12, fNDS);
-				fseek(fNDS, header.dsi9_rom_offset+size-1, SEEK_SET);
-				fputc(0, fNDS);
+				header.dsi9_rom_offset = 0;
+				fseek(fNDS, pos, SEEK_SET);
 			}
-			else has_dsi9 = true;
 			header.dsi9_ram_address = ram_address;
 			header.dsi9_size = ((size + 3) &~ 3);
 		}
 
 		// DSi ARM7 binary
 		{
-			header.dsi7_rom_offset = (ftell(fNDS) + arm7_align) &~ arm7_align;
+			long pos = ftell(fNDS);
+			header.dsi7_rom_offset = (pos + arm7_align) &~ arm7_align;
 			fseek(fNDS, header.dsi7_rom_offset, SEEK_SET);
 
 			unsigned int ram_address = 0;
@@ -731,12 +730,9 @@ void Create()
 			{
 				sections--;
 				ram_address = 0x2E80000;
-				size = 0x200;
-				fwrite("----DSi7----", 1, 12, fNDS);
-				fseek(fNDS, header.dsi7_rom_offset+size-1, SEEK_SET);
-				fputc(0, fNDS);
+				header.dsi7_rom_offset = 0;
+				fseek(fNDS, pos, SEEK_SET);
 			}
-			else has_dsi7 = true;
 			header.dsi7_ram_address = ram_address;
 			header.dsi7_size = ((size + 3) &~ 3);
 		}
@@ -753,12 +749,6 @@ void Create()
 			// Flag as DSi exclusive if ARM9 is too big
 			if (header.arm9_size > 0x3BFE00)
 				header.unitcode |= 1;
-
-			// Move the ARM9i placeholder (no code) out of the way if it overlaps with ARM7
-			unsigned int arm7_end = header.arm7_ram_address+header.arm7_size;
-			if (!has_dsi9 && header.dsi9_ram_address < arm7_end &&
-				header.arm7_ram_address < header.dsi9_ram_address+header.dsi9_size)
-				header.dsi9_ram_address = (arm7_end + 3) &~ 3;
 		} else
 		{
 			// Undo DSi section copy, keep this a NDS-only image
@@ -768,19 +758,13 @@ void Create()
 	}
 
 	// Sections are linked for their RAM addresses: refuse to build an image where they overlap
+	// (empty sections never overlap anything)
 	CheckNoOverlap("ARM9", header.arm9_ram_address, header.arm9_size, "ARM7", header.arm7_ram_address, header.arm7_size);
-	if (has_dsi9)
-	{
-		CheckNoOverlap("ARM9i", header.dsi9_ram_address, header.dsi9_size, "ARM9", header.arm9_ram_address, header.arm9_size);
-		CheckNoOverlap("ARM9i", header.dsi9_ram_address, header.dsi9_size, "ARM7", header.arm7_ram_address, header.arm7_size);
-	}
-	if (has_dsi7)
-	{
-		CheckNoOverlap("ARM7i", header.dsi7_ram_address, header.dsi7_size, "ARM9", header.arm9_ram_address, header.arm9_size);
-		CheckNoOverlap("ARM7i", header.dsi7_ram_address, header.dsi7_size, "ARM7", header.arm7_ram_address, header.arm7_size);
-		if (has_dsi9)
-			CheckNoOverlap("ARM7i", header.dsi7_ram_address, header.dsi7_size, "ARM9i", header.dsi9_ram_address, header.dsi9_size);
-	}
+	CheckNoOverlap("ARM9i", header.dsi9_ram_address, header.dsi9_size, "ARM9", header.arm9_ram_address, header.arm9_size);
+	CheckNoOverlap("ARM9i", header.dsi9_ram_address, header.dsi9_size, "ARM7", header.arm7_ram_address, header.arm7_size);
+	CheckNoOverlap("ARM7i", header.dsi7_ram_address, header.dsi7_size, "ARM9", header.arm9_ram_address, header.arm9_size);
+	CheckNoOverlap("ARM7i", header.dsi7_ram_address, header.dsi7_size, "ARM7", header.arm7_ram_address, header.arm7_size);
+	CheckNoOverlap("ARM7i", header.dsi7_ram_address, header.dsi7_size, "ARM9i", header.dsi9_ram_address, header.dsi9_size);
 
 	header.rom_control_info1 = 0x00586000;
 	header.rom_control_info2 = 0x001808F8;
