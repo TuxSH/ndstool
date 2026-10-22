@@ -130,7 +130,7 @@ HelpLine helplines[] =
 	{"z",   "  ARM7 SCFG EXT mask\n-z scfgmask (32-bit hex)"},
 	{"a",   "  DSi access flags\n-a accessflags (32-bit hex)"},
 	{"p",   "  DSi application flags\n-p appflags (8-bit hex)"},
-	{"q",   "  DSi ARM7 WRAM_A map address\n-m address (32-bit hex)"},
+	{"q",   "  DSi ARM7 WRAM_A map address\n-q address (32-bit hex)"},
 	{"M",   "  DSi WRAM/MBK settings\n-M file.bin\n0x30 bytes, as at header 0x180: MBK1-5,\nARM9 MBK6-8, ARM7 MBK6-8, MBK9/WRAMCNT.\nCannot be combined with -q."},
 };
 
