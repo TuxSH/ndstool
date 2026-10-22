@@ -328,6 +328,10 @@ void Create()
 	if (!fNDS) { fprintf(stderr, "Cannot open file '%s'.\n", ndsfilename); exit(1); }
 
 	bool bSecureSyscalls = false;
+	if (mbkfilename && mbkArm7WramMapAddress) {
+		fprintf(stderr, "-M (WRAM/MBK settings file) and -q (WRAM_A map address) cannot be combined.\n");
+		exit(1);
+	}
 	char *headerfilename = (headerfilename_or_size && (strtoul(headerfilename_or_size,0,0) == 0)) ? headerfilename_or_size : 0;
 	u32 headersize = headerfilename_or_size ? strtoul(headerfilename_or_size,0,0) : (is_both_elf ? 0x4000 : 0x200);
 
@@ -766,6 +770,19 @@ void Create()
 		header.arm7_mbk_setting[1] = 0x07C03740;
 		header.arm7_mbk_setting[2] = 0x07403700;
 		header.mbk9_wramcnt_setting = (0x03<<24) | 0x00000F;
+
+		// WRAM/MBK settings given as a file (header 0x180-0x1AF) replace all of the above
+		if (mbkfilename)
+		{
+			FILE *fi = fopen(mbkfilename, "rb");
+			if (!fi) { fprintf(stderr, "Cannot open file '%s'.\n", mbkfilename); exit(1); }
+			u8 *mbk = (u8 *)header.global_mbk_setting;
+			const size_t mbksize = 0x1B0 - 0x180;
+			size_t n = fread(mbk, 1, mbksize, fi);
+			bool too_long = fgetc(fi) != EOF;
+			fclose(fi);
+			if (n != mbksize || too_long) { fprintf(stderr, "WRAM/MBK settings file '%s' must be exactly 0x30 bytes.\n", mbkfilename); exit(1); }
+		}
 
 		header.region_flags = 0xFFFFFFFF;
 		header.access_control = accessControl;
