@@ -471,9 +471,9 @@ void Create()
 		if (!entry_address && ram_address) entry_address = ram_address;
 		if (!ram_address) { ram_address = entry_address = 0x02000000; }
 
-		// add dummy area for secure syscalls
+		// add dummy area for secure syscalls (raw binaries only)
 		header.arm9_size = 0;
-		if (bSecureSyscalls)
+		if (bSecureSyscalls && !is_arm9_elf)
 		{
 			unsigned_int x;
 			FILE *fARM9 = fopen(arm9filename, "rb");
