@@ -81,6 +81,39 @@ typedef struct
   Elf32_Word p_align;  /* Alignment value.   */
 } Elf32_Phdr;
 
+/* Section header structure. */
+typedef struct
+{
+  Elf32_Word sh_name;      /* Section name (string table index). */
+  Elf32_Word sh_type;      /* Section type.                      */
+  Elf32_Word sh_flags;     /* Section flags.                     */
+  Elf32_Addr sh_addr;      /* Address in memory.                 */
+  Elf32_Off  sh_offset;    /* File offset.                       */
+  Elf32_Word sh_size;      /* Section size.                      */
+  Elf32_Word sh_link;      /* Link to another section.           */
+  Elf32_Word sh_info;      /* Additional section information.    */
+  Elf32_Word sh_addralign; /* Section alignment.                 */
+  Elf32_Word sh_entsize;   /* Entry size if section holds table. */
+} Elf32_Shdr;
+
+/* Symbol table entry structure. */
+typedef struct
+{
+  Elf32_Word    st_name;  /* Symbol name (string table index). */
+  Elf32_Addr    st_value; /* Symbol value.                     */
+  Elf32_Word    st_size;  /* Symbol size.                      */
+  unsigned char st_info;  /* Symbol type and binding.          */
+  unsigned char st_other; /* Symbol visibility.                */
+  Elf32_Half    st_shndx; /* Section index.                    */
+} Elf32_Sym;
+
+/* Section header types. */
+typedef enum
+{
+  SHT_SYMTAB = 2, /* Symbol table. */
+  SHT_STRTAB = 3, /* String table. */
+} ELF_SH_TYPE;
+
 /* Object file type. */
 typedef enum
 {
@@ -161,6 +194,7 @@ int  CopyFromElf(char *elfFilename,
                  bool is_arm9,
                  bool is_twl);
 void CopyOverlaysFromElf(const char* elfFilename, bool is_arm9);
+bool ElfFindSymbol(const char *elfFilename, const char *name, unsigned int *value);
 void ElfReadHdr(FILE *fp, Elf32_Ehdr *hdr, Elf32_Phdr **phdr);
 void ElfWriteData(size_t n, FILE *in, FILE *out);
 void ElfWriteZeros(size_t n, FILE *fp);

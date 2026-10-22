@@ -726,6 +726,14 @@ void Create()
 			unsigned int ram_address = 0;
 			unsigned int size = 0;
 			CopyFromElf(arm7filename, NULL, &ram_address, &size, &mbkArm7WramMapAddress, NULL, false, true);
+
+			// The ARM7 can place the device list itself (e.g. after its ARM7i data) with a __twl_device_list symbol
+			unsigned int device_list = 0;
+			if (ElfFindSymbol(arm7filename, "__twl_device_list", &device_list))
+			{
+				if (device_list & 3) { fprintf(stderr, "__twl_device_list (0x%08X) is not 4-byte aligned.\n", device_list); exit(1); }
+				deviceListRamAddress = device_list;
+			}
 			if (!size)
 			{
 				sections--;

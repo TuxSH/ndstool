@@ -340,3 +340,70 @@ void CopyOverlaysFromElf(const char* elfFilename, bool is_arm9)
 	free(p_headers);
 	fclose(in);
 }
+
+/* Function:    bool ElfFindSymbol(const char *elfFilename, const char *name,
+                                   unsigned int *value)
+ * Description: Look up a symbol in the symbol table of an ELF file.
+ * Parameters:  const char *elfFilename, the filename of the ELF file to use.
+ *              const char *name,        the symbol name.
+ *              unsigned int *value,     a pointer to place the symbol value at.
+ * Returns:     true if the symbol was found (the file may have no symbol table).
+ */
+bool ElfFindSymbol(const char *elfFilename, const char *name, unsigned int *value)
+{
+	FILE *in = fopen(elfFilename, "rb");
+	if(!in)
+		die("failed to open input file: '%s'\n",elfFilename);
+
+	Elf32_Ehdr header;
+	Elf32_Phdr *p_headers;
+	ElfReadHdr(in, &header, &p_headers);
+	free(p_headers);
+
+	bool found = false;
+	if(header.e_shoff && header.e_shnum && header.e_shentsize == sizeof(Elf32_Shdr)) {
+		Elf32_Shdr *s_headers = (Elf32_Shdr*)malloc(sizeof(Elf32_Shdr) * header.e_shnum);
+		if(!s_headers)
+			die("failed to allocate memory\n");
+		if(fseek(in, header.e_shoff, SEEK_SET) ||
+		   fread(s_headers, sizeof(Elf32_Shdr), header.e_shnum, in) != header.e_shnum)
+			die("failed to read section header table\n");
+
+		for(unsigned i = 0; i < header.e_shnum && !found; i++) {
+			if(s_headers[i].sh_type != SHT_SYMTAB || s_headers[i].sh_link >= header.e_shnum)
+				continue;
+
+			/* Read the symbol table and the string table it refers to. */
+			unsigned int str_offset = s_headers[s_headers[i].sh_link].sh_offset;
+			unsigned int str_size = s_headers[s_headers[i].sh_link].sh_size;
+			unsigned int num_syms = s_headers[i].sh_size / sizeof(Elf32_Sym);
+			Elf32_Sym *syms = (Elf32_Sym*)malloc(sizeof(Elf32_Sym) * num_syms);
+			char *strings = (char*)malloc(str_size + 1);
+			if(!syms || !strings)
+				die("failed to allocate memory\n");
+			if(fseek(in, s_headers[i].sh_offset, SEEK_SET) ||
+			   fread(syms, sizeof(Elf32_Sym), num_syms, in) != num_syms ||
+			   fseek(in, str_offset, SEEK_SET) ||
+			   fread(strings, 1, str_size, in) != str_size)
+				die("failed to read symbol table\n");
+			strings[str_size] = 0;
+
+			for(unsigned j = 0; j < num_syms; j++) {
+				unsigned int st_name = syms[j].st_name;
+				if(st_name < str_size && !strcmp(strings + st_name, name)) {
+					*value = syms[j].st_value;
+					found = true;
+					break;
+				}
+			}
+
+			free(strings);
+			free(syms);
+		}
+
+		free(s_headers);
+	}
+
+	fclose(in);
+	return found;
+}
