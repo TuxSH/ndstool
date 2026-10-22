@@ -334,10 +334,34 @@ void Create()
 	// initial header data
 	if (headerfilename)
 	{
-		// header template
+		// header template: an NTR header (0x200 bytes) or a full TWL header (0x1000 bytes)
 		FILE *fi = fopen(headerfilename, "rb");
 		if (!fi) { fprintf(stderr, "Cannot open file '%s'.\n", headerfilename); exit(1); }
+		fseek(fi, 0, SEEK_END);
+		long templatesize = ftell(fi);
+		fseek(fi, 0, SEEK_SET);
+		if (templatesize < 0x200) { fprintf(stderr, "Header template '%s' is smaller than 0x200 bytes.\n", headerfilename); exit(1); }
 		fread(&header, 1, 0x200, fi);
+		if (header.unitcode & 2)
+		{
+			if (templatesize >= 0x1000)
+				fread(((unsigned char *)&header) + 0x200, 1, 0x1000 - 0x200, fi);
+
+			// These are build-dependent
+			header.dsi9_rom_offset = header.dsi9_size = 0;
+			header.dsi7_rom_offset = header.dsi7_size = 0;
+			header.digest_ntr_start = header.digest_ntr_size = 0;
+			header.digest_twl_start = header.digest_twl_size = 0;
+			header.sector_hashtable_start = header.sector_hashtable_size = 0;
+			header.block_hashtable_start = header.block_hashtable_size = 0;
+			header.digest_sector_size = header.digest_block_sectorcount = 0;
+			// ARM9i/ARM7i module parameter offsets
+			header.offset_0x218 = header.offset_0x21C = 0;
+			header.modcrypt1_start = header.modcrypt1_size = 0;
+			header.modcrypt2_start = header.modcrypt2_size = 0;
+			// All HMACs
+			memset(header.hmac_arm9, 0, 0x3B4 - 0x300);
+		}
 		fclose(fi);
 
 		if ((header.arm9_ram_address + 0x800 == header.arm9_entry_address) || (header.rom_header_size > 0x200))

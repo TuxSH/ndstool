@@ -115,7 +115,7 @@ HelpLine helplines[] =
 	{"y",	"  Overlay files\n-y directory"},
 	{"b",	"  Banner bitmap/text\n-b file.bmp \"text;text;text\"\nThe three lines are shown at different sizes."},
 	{"t",	"  Banner binary\n-t file.bin"},
-	{"h",	"  Header template\n-h file.bin\nUse the header from another ROM as a template."},
+	{"h",	"  Header template\n-h file.bin\nUse the header from another ROM as a template.\nThe first 0x200 bytes are used, or 0x1000 for a DSi header."},
 	{"h",	"  Header size\n-h size\nA header size of 0x4000 is default for real cards and newer homebrew, 0x200 for older homebrew."},
 	{"n",	"  Latency\n-n [L1] [L2]\ndefault=maximum"},
 	{"o",	"  Logo bitmap/binary\n-o file.bmp/file.bin"},
