@@ -75,6 +75,22 @@ void Sha1Hmac(u8 output[20], FILE* f, unsigned int pos, unsigned int size)
 }
 
 /*
+ * CheckNoOverlap
+ * Abort if two sections would be loaded to overlapping RAM ranges
+ */
+static void CheckNoOverlap(const char *name1, unsigned int ram1, unsigned int size1,
+                           const char *name2, unsigned int ram2, unsigned int size2)
+{
+	if (!size1 || !size2) return;
+	if (ram1 < ram2 + size2 && ram2 < ram1 + size1)
+	{
+		fprintf(stderr, "%s (0x%08X-0x%08X) overlaps %s (0x%08X-0x%08X) in RAM.\n",
+			name1, ram1, ram1 + size1, name2, ram2, ram2 + size2);
+		exit(1);
+	}
+}
+
+/*
  * HasElfExtension
  */
 bool HasElfExtension(char *filename)
@@ -645,6 +661,7 @@ void Create()
 	}
 
 	// DSi sections
+	bool has_dsi9 = false, has_dsi7 = false;
 	if (header.rom_header_size > 0x200 && is_both_elf)
 	{
 		int sections = 2;
@@ -668,6 +685,7 @@ void Create()
 				fseek(fNDS, header.dsi9_rom_offset+size-1, SEEK_SET);
 				fputc(0, fNDS);
 			}
+			else has_dsi9 = true;
 			header.dsi9_ram_address = ram_address;
 			header.dsi9_size = ((size + 3) &~ 3);
 		}
@@ -689,6 +707,7 @@ void Create()
 				fseek(fNDS, header.dsi7_rom_offset+size-1, SEEK_SET);
 				fputc(0, fNDS);
 			}
+			else has_dsi7 = true;
 			header.dsi7_ram_address = ram_address;
 			header.dsi7_size = ((size + 3) &~ 3);
 		}
@@ -706,26 +725,32 @@ void Create()
 			if (header.arm9_size > 0x3BFE00)
 				header.unitcode |= 1;
 
-			// Move ARM7 out of the way if it overlaps with ARM9
-			unsigned int arm9_end = header.arm9_ram_address+header.arm9_size;
-			if (header.arm7_ram_address < arm9_end)
-			{
-				unsigned int new_arm7_addr = (arm9_end + 3) &~ 3;
-				header.arm7_entry_address = header.arm7_entry_address + new_arm7_addr - header.arm7_ram_address;
-				header.arm7_ram_address = new_arm7_addr;
-				header.unitcode |= 1;
-
-				// Move ARM9i out of the way if it overlaps with ARM7
-				unsigned int arm7_end = header.arm7_ram_address+header.arm7_size;
-				if (header.dsi9_ram_address < arm7_end)
-					header.dsi9_ram_address = (arm7_end + 3) &~ 3;
-			}
+			// Move the ARM9i placeholder (no code) out of the way if it overlaps with ARM7
+			unsigned int arm7_end = header.arm7_ram_address+header.arm7_size;
+			if (!has_dsi9 && header.dsi9_ram_address < arm7_end &&
+				header.arm7_ram_address < header.dsi9_ram_address+header.dsi9_size)
+				header.dsi9_ram_address = (arm7_end + 3) &~ 3;
 		} else
 		{
 			// Undo DSi section copy, keep this a NDS-only image
 			fseek(fNDS, newfilesize, SEEK_SET);
 			ftruncate(fileno(fNDS), newfilesize);
 		}
+	}
+
+	// Sections are linked for their RAM addresses: refuse to build an image where they overlap
+	CheckNoOverlap("ARM9", header.arm9_ram_address, header.arm9_size, "ARM7", header.arm7_ram_address, header.arm7_size);
+	if (has_dsi9)
+	{
+		CheckNoOverlap("ARM9i", header.dsi9_ram_address, header.dsi9_size, "ARM9", header.arm9_ram_address, header.arm9_size);
+		CheckNoOverlap("ARM9i", header.dsi9_ram_address, header.dsi9_size, "ARM7", header.arm7_ram_address, header.arm7_size);
+	}
+	if (has_dsi7)
+	{
+		CheckNoOverlap("ARM7i", header.dsi7_ram_address, header.dsi7_size, "ARM9", header.arm9_ram_address, header.arm9_size);
+		CheckNoOverlap("ARM7i", header.dsi7_ram_address, header.dsi7_size, "ARM7", header.arm7_ram_address, header.arm7_size);
+		if (has_dsi9)
+			CheckNoOverlap("ARM7i", header.dsi7_ram_address, header.dsi7_size, "ARM9i", header.dsi9_ram_address, header.dsi9_size);
 	}
 
 	header.rom_control_info1 = 0x00586000;
