@@ -328,6 +328,9 @@ void Create()
 	if (!fNDS) { fprintf(stderr, "Cannot open file '%s'.\n", ndsfilename); exit(1); }
 
 	bool bSecureSyscalls = false;
+	bool templateMbk = false;			// DSi template with WRAM/MBK settings
+	bool templateAgeRatings = false;	// full DSi template (age ratings at 0x2F0)
+	unsigned int arm7WramMapFromOption = mbkArm7WramMapAddress;		// before ELF auto-detection
 	char *headerfilename = (headerfilename_or_size && (strtoul(headerfilename_or_size,0,0) == 0)) ? headerfilename_or_size : 0;
 	u32 headersize = headerfilename_or_size ? strtoul(headerfilename_or_size,0,0) : (is_both_elf ? 0x4000 : 0x200);
 
@@ -345,7 +348,13 @@ void Create()
 		if (header.unitcode & 2)
 		{
 			if (templatesize >= 0x1000)
+			{
 				fread(((unsigned char *)&header) + 0x200, 1, 0x1000 - 0x200, fi);
+				templateAgeRatings = true;
+			}
+
+			const u8 *mbk = (const u8 *)header.global_mbk_setting;
+			templateMbk = std::any_of(mbk, mbk + 0x30, [](u8 b) { return b != 0; });
 
 			// These are build-dependent
 			header.dsi9_rom_offset = header.dsi9_size = 0;
@@ -775,21 +784,26 @@ void Create()
 			{0x90, 0x94, 0x98, 0x9C},
 		};
 
-		memcpy(header.global_mbk_setting, global_mbk, sizeof(header.global_mbk_setting));
-		header.arm9_mbk_setting[0] = 0x00000000;
-		header.arm9_mbk_setting[1] = 0x07C03740;
-		header.arm9_mbk_setting[2] = 0x07403700;
-		if (mbkArm7WramMapAddress != 0) {
+		// Keep the WRAM/MBK settings of a DSi header template; an explicit WRAM_A map address still applies
+		unsigned int wramMapAddress = templateMbk ? arm7WramMapFromOption : mbkArm7WramMapAddress;
+		if (!templateMbk)
+		{
+			memcpy(header.global_mbk_setting, global_mbk, sizeof(header.global_mbk_setting));
+			header.arm9_mbk_setting[0] = 0x00000000;
+			header.arm9_mbk_setting[1] = 0x07C03740;
+			header.arm9_mbk_setting[2] = 0x07403700;
+			header.arm7_mbk_setting[1] = 0x07C03740;
+			header.arm7_mbk_setting[2] = 0x07403700;
+			header.mbk9_wramcnt_setting = (0x03<<24) | 0x00000F;
+		}
+		if (wramMapAddress != 0) {
 			// Configure 256KB WRAM_A starting at the specified RAM address
-			unsigned int mbk_offset = (mbkArm7WramMapAddress - 0x03000000) / 0x10000;
+			unsigned int mbk_offset = (wramMapAddress - 0x03000000) / 0x10000;
 			header.arm7_mbk_setting[0] = (mbk_offset << 4) | (0x3 << 12) | ((mbk_offset + 4) << 20);
-		} else {
+		} else if (!templateMbk) {
 			// Set correct MBK settings for WRAM_A (starts at 0x3000000 in card apps, 0x37C0000 otherwise)
 			header.arm7_mbk_setting[0] = (header.unitcode & 1) ? 0x080037C0 : 0x00403000;
 		}
-		header.arm7_mbk_setting[1] = 0x07C03740;
-		header.arm7_mbk_setting[2] = 0x07403700;
-		header.mbk9_wramcnt_setting = (0x03<<24) | 0x00000F;
 
 		header.region_flags = 0xFFFFFFFF;
 		header.access_control = accessControl;
@@ -799,7 +813,8 @@ void Create()
 		header.offset_0x20C = 0x00010000;
 		header.tid_low  = header.gamecode[3] | (header.gamecode[2]<<8) | (header.gamecode[1]<<16) | (header.gamecode[0]<<24);
 		header.tid_high = titleidHigh;
-		memset(header.age_ratings, 0x80, sizeof(header.age_ratings));
+		if (!templateAgeRatings)
+			memset(header.age_ratings, 0x80, sizeof(header.age_ratings));
 
 		Sha1Hmac(header.hmac_arm9, fNDS, header.arm9_rom_offset, header.arm9_size);
 		Sha1Hmac(header.hmac_arm7, fNDS, header.arm7_rom_offset, header.arm7_size);
